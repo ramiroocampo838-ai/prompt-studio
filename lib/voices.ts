@@ -9,7 +9,7 @@ export interface Voice {
   label: string
 }
 
-const ROOT = path.resolve(import.meta.dirname, "..")
+const ROOT = process.cwd()
 const CACHE = path.join(ROOT, "data", "voices.json")
 const TTS_SCRIPT = path.join(ROOT, "tools", "tts.py")
 const MAX_AGE_MS = 7 * 24 * 3600 * 1000

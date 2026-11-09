@@ -1,0 +1,176 @@
+"use client"
+
+import { useParams } from "next/navigation"
+import { useEffect, useRef, useState } from "react"
+import { MOTIONS, type Project, type Scene } from "../../../lib/schema.ts"
+
+export default function Editor() {
+  const { id } = useParams<{ id: string }>()
+  const [project, setProject] = useState<Project | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [stamp, setStamp] = useState(Date.now())
+  const counter = useRef(1)
+
+  useEffect(() => {
+    fetch(`/api/projects/${id}`)
+      .then(async (r) => {
+        const d = await r.json()
+        if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`)
+        setProject(d)
+      })
+      .catch((e) => setError(e.message))
+  }, [id])
+
+  useEffect(() => {
+    const warn = (e: BeforeUnloadEvent) => dirty && e.preventDefault()
+    window.addEventListener("beforeunload", warn)
+    return () => window.removeEventListener("beforeunload", warn)
+  }, [dirty])
+
+  if (!project) return error ? <p className="err">{error}</p> : <p className="muted">Loading…</p>
+
+  const edit = (fn: (p: Project) => Project) => {
+    setProject(fn(project))
+    setDirty(true)
+  }
+  const patchScene = (i: number, patch: Partial<Scene>) =>
+    edit((p) => ({ ...p, scenes: p.scenes.map((s, j) => (j === i ? { ...s, ...patch } : s)) }))
+  const newId = (p: Project) => {
+    let n = p.scenes.length + counter.current++
+    while (p.scenes.some((s) => s.id === `s${n}`)) n++
+    return `s${n}`
+  }
+  const add = (at: number, copy?: Scene) =>
+    edit((p) => {
+      const scene: Scene = copy
+        ? { ...copy, id: newId(p), imageHash: undefined, audioHash: undefined, clipHash: undefined, audioDurationSec: undefined }
+        : { id: newId(p), narration: "New narration.", imagePrompt: "describe the image", seed: Math.floor(Math.random() * 1e6), motion: "zoom-in" }
+      const scenes = [...p.scenes]
+      scenes.splice(at, 0, scene)
+      return { ...p, scenes }
+    })
+  const remove = (i: number) => project.scenes.length > 1 && edit((p) => ({ ...p, scenes: p.scenes.filter((_, j) => j !== i) }))
+  const move = (i: number, d: number) =>
+    edit((p) => {
+      const scenes = [...p.scenes]
+      const [s] = scenes.splice(i, 1)
+      scenes.splice(i + d, 0, s)
+      return { ...p, scenes }
+    })
+
+  async function save() {
+    setSaving(true)
+    setError("")
+    try {
+      const res = await fetch(`/api/projects/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(project) })
+      const d = await res.json()
+      if (!res.ok) throw new Error(d.error ?? `HTTP ${res.status}`)
+      setProject(d)
+      setDirty(false)
+      setStamp(Date.now())
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const portrait = project.format === "9:16"
+  return (
+    <>
+      <div className="sticky">
+        <div>
+          <strong>{project.title}</strong> <span className="badge">{project.format}</span> {dirty && <span className="badge warn">unsaved</span>}
+        </div>
+        <div className="actions">
+          <button type="button" onClick={save} disabled={!dirty || saving}>
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+      {error && <p className="err">{error}</p>}
+
+      <div className="panel">
+        <div className="row c2">
+          <div>
+            <label>Title</label>
+            <input value={project.title} onChange={(e) => edit((p) => ({ ...p, title: e.target.value }))} />
+          </div>
+          <div>
+            <label>Visual style (applies to every image)</label>
+            <input value={project.style} onChange={(e) => edit((p) => ({ ...p, style: e.target.value }))} />
+          </div>
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={project.subtitles} onChange={(e) => edit((p) => ({ ...p, subtitles: e.target.checked }))} />
+          Burn subtitles into the video
+        </label>
+      </div>
+
+      {project.scenes.map((s, i) => (
+        <div className="scene" key={s.id}>
+          <div className={`thumb ${portrait ? "portrait" : ""}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/projects/${id}/media/images/${s.id}.jpg?v=${stamp}`} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />
+            <span style={{ position: "absolute" }} />
+          </div>
+          <div>
+            <div className="scene-head">
+              <strong>
+                Scene {i + 1} <span className="muted">({s.id})</span>
+              </strong>
+              <div className="actions">
+                <button type="button" className="ghost" disabled={i === 0} onClick={() => move(i, -1)}>
+                  ↑
+                </button>
+                <button type="button" className="ghost" disabled={i === project.scenes.length - 1} onClick={() => move(i, 1)}>
+                  ↓
+                </button>
+                <button type="button" className="ghost" onClick={() => add(i + 1, s)}>
+                  Duplicate
+                </button>
+                <button type="button" className="ghost" onClick={() => add(i + 1)}>
+                  + Below
+                </button>
+                <button type="button" className="ghost danger" disabled={project.scenes.length === 1} onClick={() => remove(i)}>
+                  Delete
+                </button>
+              </div>
+            </div>
+            <div className="row">
+              <div>
+                <label>Narration</label>
+                <textarea value={s.narration} onChange={(e) => patchScene(i, { narration: e.target.value })} rows={3} />
+              </div>
+            </div>
+            <div className="row">
+              <div>
+                <label>Image prompt</label>
+                <textarea value={s.imagePrompt} onChange={(e) => patchScene(i, { imagePrompt: e.target.value })} rows={2} />
+              </div>
+            </div>
+            <div className="row c3">
+              <div>
+                <label>Camera motion</label>
+                <select value={s.motion} onChange={(e) => patchScene(i, { motion: e.target.value as Scene["motion"] })}>
+                  {MOTIONS.map((m) => (
+                    <option key={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label>Seed</label>
+                <input type="number" value={s.seed} onChange={(e) => patchScene(i, { seed: Math.trunc(Number(e.target.value)) })} />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+      <button type="button" className="ghost" onClick={() => add(project.scenes.length)}>
+        + Add scene
+      </button>
+    </>
+  )
+}

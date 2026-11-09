@@ -9,9 +9,8 @@ import { parseArgs } from "node:util"
 import { ProjectSchema } from "../lib/schema.ts"
 import { listProjects, loadProject, saveProject, paths } from "../lib/store.ts"
 import { buildProject } from "../lib/pipeline/build.ts"
-import { generateStoryboard, slugify, toProject } from "../lib/pipeline/storyboard.ts"
+import { createFromPrompt } from "../lib/pipeline/create.ts"
 import { pollinationsText } from "../lib/providers/llm/pollinations.ts"
-import { withRetry } from "../lib/queue.ts"
 import { assertVoice, filterVoices, loadVoices } from "../lib/voices.ts"
 import fs from "node:fs"
 
@@ -42,14 +41,13 @@ if (cmd === "voices") {
   if (!(durationSec >= 10 && durationSec <= 600)) throw new Error("--seconds must be between 10 and 600")
   const req = { prompt: a, language: values.lang, format, style: values.style, durationSec } as const
   console.log("Asking the model for a storyboard...")
-  const storyboard = await withRetry(() => generateStoryboard(pollinationsText, req), {
-    retries: 2,
+  const project = await createFromPrompt(pollinationsText, req, {
+    id: values.id,
+    voice: values.voice,
+    subtitles: !values["no-subs"],
     onRetry: (e, n) => console.log(`  ${e.message}; retry ${n}`),
   })
-  const id = values.id ?? slugify(storyboard.title)
-  if (fs.existsSync(paths(id).file)) throw new Error(`Project '${id}' already exists; pass --id to choose another name`)
-  const project = toProject(storyboard, req, id, { voice: values.voice, subtitles: !values["no-subs"] })
-  saveProject(project)
+  const id = project.id
   console.log(`\n"${project.title}" (${project.scenes.length} scenes) saved to ${paths(id).file}`)
   for (const s of project.scenes) console.log(`  ${s.id}: ${s.narration}`)
   if (values.build) await buildProject(project)

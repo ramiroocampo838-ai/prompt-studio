@@ -5,6 +5,7 @@ import type { LlmProvider } from "../lib/providers/llm/pollinations.ts"
 import { languageOf } from "../lib/languages.ts"
 import { alignWords, buildCues, fallbackWords, filterPath, toAss } from "../lib/subtitles.ts"
 import { hashOf } from "../lib/hash.ts"
+import { pickId } from "../lib/pipeline/create.ts"
 import { RateLimitError, mapLimit, withRetry } from "../lib/queue.ts"
 import { clipArgs, concatList, motionFilter } from "../lib/ffmpeg.ts"
 import { planStale, imageHashOf, audioHashOf, clipHashOf } from "../lib/pipeline/build.ts"
@@ -24,6 +25,15 @@ describe("schema", () => {
   })
   it("rejects ids that are not simple slugs", () => {
     expect(ProjectSchema.safeParse({ id: "../x", title: "T", scenes: [scene("a")] }).success).toBe(false)
+  })
+})
+
+describe("pickId", () => {
+  const taken = (ids: string[]) => (id: string) => ids.includes(id)
+  it("suffixes derived ids and rejects taken explicit ids", () => {
+    expect(pickId("sky", false, taken([]))).toBe("sky")
+    expect(pickId("sky", false, taken(["sky", "sky-2"]))).toBe("sky-3")
+    expect(() => pickId("sky", true, taken(["sky"]))).toThrow(/already exists/)
   })
 })
 

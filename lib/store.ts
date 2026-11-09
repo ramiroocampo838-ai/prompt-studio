@@ -2,7 +2,8 @@ import fs from "node:fs"
 import path from "node:path"
 import { ProjectSchema, type Project } from "./schema.ts"
 
-export const DATA_DIR = path.resolve(import.meta.dirname, "..", "data", "projects")
+// Resolved from the working directory (the project root) so it also works when bundled by Next.js.
+export const DATA_DIR = path.resolve(process.cwd(), "data", "projects")
 
 export const projectDir = (id: string) => path.join(DATA_DIR, id)
 
@@ -43,4 +44,32 @@ export function listProjects(): string[] {
     .readdirSync(DATA_DIR, { withFileTypes: true })
     .filter((d) => d.isDirectory() && fs.existsSync(path.join(DATA_DIR, d.name, "project.json")))
     .map((d) => d.name)
+}
+
+export interface ProjectSummary {
+  id: string
+  title: string
+  format: Project["format"]
+  scenes: number
+  hasVideo: boolean
+  updatedAt: string
+}
+
+export function summarize(id: string): ProjectSummary {
+  const p = loadProject(id)
+  const dirs = paths(id)
+  return {
+    id,
+    title: p.title,
+    format: p.format,
+    scenes: p.scenes.length,
+    hasVideo: fs.existsSync(path.join(dirs.out, `${id}.mp4`)),
+    updatedAt: fs.statSync(dirs.file).mtime.toISOString(),
+  }
+}
+
+export function deleteProject(id: string): void {
+  const root = paths(id).root
+  if (path.dirname(root) !== DATA_DIR) throw new Error("refusing to delete outside the data folder")
+  fs.rmSync(root, { recursive: true, force: true })
 }

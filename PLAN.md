@@ -172,6 +172,16 @@ Objetivo: prompt → 3 escenas → mp4, por CLI, antes de construir la UI.
 | 5 | Respaldos y robustez | 1 día |
 | 6 | Documentación | 0.5 día |
 
+## 8b. Resultado de la Fase 4A (2026-11-09) ✅
+
+La Fase 4 se dividió en tres entregas: **4A** base Next.js + listado + crear desde prompt + editor de storyboard; **4B** render con progreso en vivo (SSE), reproductor y descarga; **4C** galería/generador de imágenes y reutilización en escenas.
+
+- Next 16 (App Router, CSS plano). `pnpm dev` → http://127.0.0.1:3000 (usa `--use-system-ca` por el proxy corporativo).
+- API: `GET/POST /api/projects`, `GET/PUT/DELETE /api/projects/[id]`, media con soporte `Range`, `GET /api/voices`. IDs validados (anti path-traversal); PUT valida con `ProjectSchema`.
+- UI: crear storyboard (prompt, duración, idioma, formato, estilo), listado con borrado, editor (título, estilo, subtítulos, narración/prompt/movimiento/seed por escena, duplicar, reordenar, borrar, añadir; aviso de cambios sin guardar).
+- `scripts/studio.ts create` y la web comparten `createFromPrompt`.
+- Verificado: typecheck limpio, 32 tests, `next build` OK, curl (lista, GET, PUT round-trip, id malicioso 400, Range 206) y capturas headless de ambas páginas.
+
 ## 9. Resultado de la Fase 3 (2026-11-09) ✅
 
 - **Subtítulos quemados (ASS)**: `tools/tts.py` ahora pide a edge-tts los tiempos por palabra (`WordBoundary`) y guarda `<audio>.words.json`. `lib/subtitles.ts` (puro y testeado) alinea esas palabras con la puntuación de la narración, agrupa en cues (máx. 44 caracteres en 16:9 y 24 en 9:16, cortando en frases y cláusulas, sin dejar palabras cortas como "y"/"de" al final de línea), genera el `.ass` y ffmpeg lo quema con el filtro `ass`. Si no hay tiempos, reparte las palabras proporcionalmente (fallback). Estilo: Arial negrita blanca con contorno; en vertical se sube para no chocar con la UI de las redes.

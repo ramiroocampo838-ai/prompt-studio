@@ -9,7 +9,7 @@ export interface TtsJob {
   out: string
 }
 
-const TTS_SCRIPT = path.resolve(import.meta.dirname, "..", "..", "..", "tools", "tts.py")
+const TTS_SCRIPT = path.resolve(process.cwd(), "tools", "tts.py")
 
 export function synthesizeEdge(jobs: TtsJob[]): void {
   if (!jobs.length) return
