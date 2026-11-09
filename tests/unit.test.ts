@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
 import { ProjectSchema } from "../lib/schema.ts"
+import { buildMessages, extractJson, generateStoryboard, parseStoryboard, sceneCount, slugify, toProject } from "../lib/pipeline/storyboard.ts"
+import type { LlmProvider } from "../lib/providers/llm/pollinations.ts"
+import { languageOf } from "../lib/languages.ts"
 import { hashOf } from "../lib/hash.ts"
 import { RateLimitError, mapLimit, withRetry } from "../lib/queue.ts"
 import { clipArgs, concatList, motionFilter } from "../lib/ffmpeg.ts"
@@ -108,5 +111,60 @@ describe("planStale", () => {
     const s = planStale(fresh(), "prov", (f) => !f.endsWith("a.mp3"))
     expect(s.audio).toEqual(["a"])
     expect(s.clips).toEqual(["a"])
+  })
+})
+
+describe("storyboard", () => {
+  const good = JSON.stringify({
+    title: "El mapa más antiguo",
+    scenes: [
+      { narration: "Uno.", imagePrompt: "a ship", motion: "pan-left" },
+      { narration: "Dos.", imagePrompt: "a star" },
+    ],
+  })
+  const req = { prompt: "x", language: "es", format: "9:16" as const, style: "oil painting", durationSec: 24 }
+
+  it("extracts JSON from fences and surrounding text", () => {
+    expect(extractJson('Sure!\n```json\n{"a":1}\n```')).toEqual({ a: 1 })
+    expect(extractJson('here: {"a":{"b":2}} done')).toEqual({ a: { b: 2 } })
+    expect(() => extractJson("no json")).toThrow()
+  })
+  it("scales scene count with duration within limits", () => {
+    expect([sceneCount(5), sceneCount(60), sceneCount(9999)]).toEqual([2, 5, 40])
+  })
+  it("asks for the right language, scene count and English image prompts", () => {
+    const text = buildMessages(req).map((m) => m.content).join("\n")
+    expect(text).toContain("Exactly 2 scenes")
+    expect(text).toContain("Spanish")
+    expect(text).toContain("always in English")
+  })
+  it("rejects storyboards with empty fields", () => {
+    expect(() => parseStoryboard('{"title":"t","scenes":[{"narration":"","imagePrompt":"x"}]}')).toThrow(/narration/)
+  })
+  it("retries with the validation error and then succeeds", async () => {
+    const seen: string[] = []
+    const answers = ["not json at all", good]
+    const llm: LlmProvider = { name: "fake", chat: async (msgs) => { seen.push(msgs.at(-1)!.content); return answers.shift()! } }
+    const sb = await generateStoryboard(llm, req)
+    expect(sb.scenes).toHaveLength(2)
+    expect(seen[1]).toContain("invalid")
+  })
+  it("gives up after the attempt limit", async () => {
+    const llm: LlmProvider = { name: "fake", chat: async () => "nope" }
+    await expect(generateStoryboard(llm, req, 2)).rejects.toThrow(/2 attempts/)
+  })
+  it("builds a valid project with voice, defaults and rotating motions", () => {
+    const p = toProject(parseStoryboard(good), req, "mapa")
+    expect(p.voice).toBe(languageOf("es").voice)
+    expect(p.scenes.map((s) => s.motion)).toEqual(["pan-left", "zoom-out"])
+    expect(p.scenes.map((s) => s.id)).toEqual(["s1", "s2"])
+    expect(ProjectSchema.safeParse(p).success).toBe(true)
+  })
+  it("slugifies accents and symbols, never empty", () => {
+    expect(slugify("¡El mapa más antiguo!")).toBe("el-mapa-mas-antiguo")
+    expect(slugify("???")).toBe("video")
+  })
+  it("rejects unsupported languages", () => {
+    expect(() => languageOf("xx")).toThrow(/Unsupported/)
   })
 })

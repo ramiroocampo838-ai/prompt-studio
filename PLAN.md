@@ -172,7 +172,23 @@ Objetivo: prompt → 3 escenas → mp4, por CLI, antes de construir la UI.
 | 5 | Respaldos y robustez | 1 día |
 | 6 | Documentación | 0.5 día |
 
-## 9. Resultado de la Fase 1 (2026-11-09) ✅
+## 9. Resultado de la Fase 2 (2026-11-09) ✅
+
+Storyboard con LLM **sin instalar nada y sin cuenta**, usando el endpoint de texto de Pollinations (compatible con OpenAI, modelo `gpt-oss-20b`). Se descartó Ollama a petición del usuario.
+
+- `lib/providers/llm/pollinations.ts`: proveedor intercambiable (`LlmProvider.chat`), modo JSON, `RateLimitError` ante 402/429.
+- `lib/pipeline/storyboard.ts`: prompt de sistema (N escenas según duración, narración en el idioma elegido, `imagePrompt` siempre en inglés y visualmente consistente), extracción de JSON tolerante (code fences, texto alrededor), validación con zod y **reintento mostrando el error al modelo**. Escenas de ~12 s (~29 palabras).
+- `lib/languages.ts`: idioma → voz de edge-tts (en, es, pt, fr, de, it).
+- CLI: `pnpm studio create "<prompt>" [--seconds 60] [--lang es] [--format 9:16] [--style "..."] [--id x] [--build]`. Sin `--build` guarda el storyboard para revisarlo/editarlo antes de gastar cuota de imágenes.
+- Verificado de extremo a extremo: prompt en español → 3 escenas → video vertical de 27.7 s con voz en español e imágenes coherentes. 25 tests en verde.
+
+Hallazgos:
+- **El texto tiene el mismo límite que las imágenes: 1 respuesta cada 45 s por IP** (HTTP 402 con `Retry-After`); los reintentos lo respetan.
+- `gpt-oss-20b` es un modelo de razonamiento y con el límite por defecto devolvía HTTP 400 (`output_token_limit_exceeded`). Solución: `max_tokens: 8000` y `reasoning_effort: "low"`.
+- Los errores HTTP ahora incluyen el cuerpo de la respuesta para poder diagnosticar.
+- Tiempo realista: un video de N escenas tarda ≈ 45 s × (N + 1) en total por los límites gratuitos (3 escenas ≈ 3 min).
+
+## 10. Resultado de la Fase 1 (2026-11-09) ✅
 
 Pipeline en TypeScript (Node 24 ejecuta `.ts` sin compilar; `tsc` solo verifica tipos). Reemplaza al prototipo `src/`.
 
@@ -186,7 +202,7 @@ Pipeline en TypeScript (Node 24 ejecuta `.ts` sin compilar; `tsc` solo verifica 
 - 16 tests (vitest): esquemas, hash, reintentos, concurrencia, comandos ffmpeg, `planStale` y un test de integración con ffmpeg real y proveedores falsos (verifica idempotencia y reconstrucción parcial).
 - Verificado de extremo a extremo con proveedores reales: 17.8 s; la segunda ejecución no hizo nada (0 imágenes, 0 voces, 0 clips).
 
-## 10. Resultado de la Fase 0 (2026-11-09) ✅
+## 11. Resultado de la Fase 0 (2026-11-09) ✅
 
 
 Prototipo en `src/` (`pnpm demo [16:9|9:16]`): 3 escenas → imágenes → voz → mp4 de 17.8 s, 1920×1080, 25 fps, 2.3 MB, generado en ~21 s. Calidad de imagen y voz aceptable, zoom/paneo fluido.
@@ -199,7 +215,7 @@ Hallazgos que cambian el plan:
 
 9:16 también probado (1080×1920, 17.8 s); tardó 120 s por el límite de imágenes de Pollinations.
 
-## 11. Pendientes por decidir
+## 12. Pendientes por decidir
 
 1. Qué hacer con la marca de agua de Pollinations en el resultado final (aceptarla, usar stock, o volver a evaluar proveedores).
 2. Cómo tratar el límite de 1 imagen/45 s (aceptar la espera, o buscar un proveedor alternativo sin cuenta).
