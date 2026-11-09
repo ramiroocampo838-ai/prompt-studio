@@ -182,6 +182,15 @@ La Fase 4 se dividió en tres entregas: **4A** base Next.js + listado + crear de
 - `scripts/studio.ts create` y la web comparten `createFromPrompt`.
 - Verificado: typecheck limpio, 32 tests, `next build` OK, curl (lista, GET, PUT round-trip, id malicioso 400, Range 206) y capturas headless de ambas páginas.
 
+## 8c. Resultado de la Fase 4B (2026-11-09) ✅
+
+- `lib/jobs.ts`: el render corre como **proceso hijo** (`scripts/studio.ts build <id>`) porque el build usa ffmpeg/edge-tts síncronos y bloquearía el servidor. Un job por proyecto (en memoria); salida en vivo.
+- API: `POST /api/projects/[id]/render` (202; 409 si ya corre) y `GET .../render` (SSE: `line` + `state`). `PUT`/`DELETE` devuelven 409 mientras se renderiza.
+- `PUT` conserva en el servidor los hashes de caché (`imageHash`, `audioHash`, `clipHash`, duración): una copia vieja del cliente no puede borrarlos y forzar regenerar imágenes.
+- UI: botón *Render video* (guarda antes si hay cambios), barra de progreso derivada del log, reproductor, descarga MP4, botón 🎲 de seed por escena (regenera solo esa imagen). Reconecta al log si recargas durante un render.
+- Verificado: render real vía API (voz + 3 clips + concat), 409 en doble render y PUT, segundo render sin trabajo (0/0/0), SSE completo, captura de la UI.
+- Limitación: los jobs viven en memoria (reiniciar el servidor pierde el log, no los archivos). Regenerar voz = editar la narración.
+
 ## 9. Resultado de la Fase 3 (2026-11-09) ✅
 
 - **Subtítulos quemados (ASS)**: `tools/tts.py` ahora pide a edge-tts los tiempos por palabra (`WordBoundary`) y guarda `<audio>.words.json`. `lib/subtitles.ts` (puro y testeado) alinea esas palabras con la puntuación de la narración, agrupa en cues (máx. 44 caracteres en 16:9 y 24 en 9:16, cortando en frases y cláusulas, sin dejar palabras cortas como "y"/"de" al final de línea), genera el `.ass` y ffmpeg lo quema con el filtro `ass`. Si no hay tiempos, reparte las palabras proporcionalmente (fallback). Estilo: Arial negrita blanca con contorno; en vertical se sube para no chocar con la UI de las redes.

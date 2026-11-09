@@ -1,7 +1,7 @@
 "use client"
 
 import { useParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { MOTIONS, type Project, type Scene } from "../../../lib/schema.ts"
 
 export default function Editor() {
@@ -12,6 +12,51 @@ export default function Editor() {
   const [error, setError] = useState("")
   const [stamp, setStamp] = useState(Date.now())
   const counter = useRef(1)
+  const [render, setRender] = useState<{ status: string; lines: string[]; error?: string }>({ status: "idle", lines: [] })
+  const source = useRef<EventSource | null>(null)
+
+  const listen = useCallback(
+    (reset: boolean) => {
+      source.current?.close()
+      if (reset) setRender({ status: "running", lines: [] })
+      const es = new EventSource(`/api/projects/${id}/render`)
+      source.current = es
+      es.addEventListener("line", (e) => setRender((r) => ({ ...r, lines: [...r.lines, JSON.parse(e.data)] })))
+      es.addEventListener("state", (e) => {
+        const st = JSON.parse(e.data)
+        setRender((r) => ({ ...r, status: st.status, error: st.error }))
+        if (st.status !== "running") {
+          es.close()
+          if (st.status === "done") {
+            setStamp(Date.now())
+            fetch(`/api/projects/${id}`).then((r) => r.json()).then((p) => !p.error && setProject(p))
+          }
+        }
+      })
+      es.onerror = () => es.close()
+    },
+    [id],
+  )
+  useEffect(() => {
+    listen(false)
+    return () => source.current?.close()
+  }, [listen])
+
+  const rendering = render.status === "running"
+  const total = (() => {
+    const m = render.lines.map((l) => l.match(/to do: (\d+) images, (\d+) voices, (\d+) clips/)).find(Boolean)
+    return m ? Number(m[1]) + (Number(m[2]) ? 1 : 0) + Number(m[3]) + 1 : 0
+  })()
+  const doneSteps = render.lines.filter((l) => /^(image |voice |clip |Final:)/.test(l)).length
+  const pct = render.status === "done" ? 100 : total ? Math.min(99, Math.round((doneSteps / total) * 100)) : 0
+
+  async function startRender() {
+    setError("")
+    if (dirty && !(await save())) return
+    const res = await fetch(`/api/projects/${id}/render`, { method: "POST" })
+    if (!res.ok && res.status !== 409) return setError((await res.json()).error ?? `HTTP ${res.status}`)
+    listen(true)
+  }
 
   useEffect(() => {
     fetch(`/api/projects/${id}`)
@@ -60,7 +105,7 @@ export default function Editor() {
       return { ...p, scenes }
     })
 
-  async function save() {
+  async function save(): Promise<boolean> {
     setSaving(true)
     setError("")
     try {
@@ -70,8 +115,10 @@ export default function Editor() {
       setProject(d)
       setDirty(false)
       setStamp(Date.now())
+      return true
     } catch (e) {
       setError((e as Error).message)
+      return false
     } finally {
       setSaving(false)
     }
@@ -85,12 +132,40 @@ export default function Editor() {
           <strong>{project.title}</strong> <span className="badge">{project.format}</span> {dirty && <span className="badge warn">unsaved</span>}
         </div>
         <div className="actions">
-          <button type="button" onClick={save} disabled={!dirty || saving}>
+          <button type="button" className="ghost" onClick={save} disabled={!dirty || saving || rendering}>
             {saving ? "Saving…" : "Save"}
+          </button>
+          <button type="button" onClick={startRender} disabled={rendering || saving}>
+            {rendering ? "Rendering…" : "Render video"}
           </button>
         </div>
       </div>
       {error && <p className="err">{error}</p>}
+
+      {render.status !== "idle" && (
+        <div className="panel">
+          <h2>Render {render.status === "done" ? "finished" : render.status === "error" ? "failed" : "in progress"}</h2>
+          <div className="bar">
+            <div style={{ width: `${pct}%` }} />
+          </div>
+          <pre className="log">{render.lines.slice(-8).join("\n")}</pre>
+          {render.error && <p className="err">{render.error}</p>}
+        </div>
+      )}
+
+      {!rendering && (
+        <div className="panel">
+          <h2>Video</h2>
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video key={stamp} className={portrait ? "player portrait" : "player"} controls preload="metadata" src={`/api/projects/${id}/media/out/${id}.mp4?v=${stamp}`} />
+          <div className="actions" style={{ marginTop: 10 }}>
+            <a href={`/api/projects/${id}/media/out/${id}.mp4`} download={`${id}.mp4`}>
+              Download MP4
+            </a>
+            <span className="muted">Only changed scenes are regenerated on each render.</span>
+          </div>
+        </div>
+      )}
 
       <div className="panel">
         <div className="row c2">
@@ -161,8 +236,13 @@ export default function Editor() {
                 </select>
               </div>
               <div>
-                <label>Seed</label>
-                <input type="number" value={s.seed} onChange={(e) => patchScene(i, { seed: Math.trunc(Number(e.target.value)) })} />
+                <label>Seed (change it to get a different image)</label>
+                <div className="actions" style={{ flexWrap: "nowrap" }}>
+                  <input type="number" value={s.seed} onChange={(e) => patchScene(i, { seed: Math.trunc(Number(e.target.value)) })} />
+                  <button type="button" className="ghost" title="Random seed" onClick={() => patchScene(i, { seed: Math.floor(Math.random() * 1e6) })}>
+                    🎲
+                  </button>
+                </div>
               </div>
             </div>
           </div>
