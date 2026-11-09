@@ -30,6 +30,7 @@ export const ProjectSchema = z
     format: z.enum(["16:9", "9:16"]).default("16:9"),
     style: z.string().default(""),
     padSeconds: z.number().min(0).default(0.6),
+    subtitles: z.boolean().default(true),
     scenes: z.array(SceneSchema).min(1),
   })
   .superRefine((p, ctx) => {

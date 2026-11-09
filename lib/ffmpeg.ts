@@ -2,6 +2,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import { FORMATS, type Format, type Scene } from "./schema.ts"
+import { filterPath } from "./subtitles.ts"
 
 export function run(cmd: string, args: string[]): string {
   const r = spawnSync(cmd, args, { encoding: "utf8" })
@@ -41,6 +42,7 @@ export interface ClipSpec {
   audioSec: number
   pad: number
   crf?: number
+  subtitles?: string
 }
 
 // Pure: builds the ffmpeg arguments of one scene clip (still image with camera motion + narration).
@@ -52,7 +54,8 @@ export function clipArgs(s: ClipSpec): { args: string[]; totalSec: number } {
   // Upscale 2x before zoompan to avoid the jitter caused by integer pixel rounding.
   const vf =
     `scale=${width * 2}:${height * 2}:force_original_aspect_ratio=increase,crop=${width * 2}:${height * 2},` +
-    `zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=${N}:s=${width}x${height}:fps=${FPS},format=yuv420p`
+    `zoompan=z='${m.z}':x='${m.x}':y='${m.y}':d=${N}:s=${width}x${height}:fps=${FPS},format=yuv420p` +
+    (s.subtitles ? `,ass='${filterPath(s.subtitles)}'` : "")
   const args = [
     "-y", "-loop", "1", "-i", s.image, "-i", s.audio,
     "-vf", vf, "-af", `apad=pad_dur=${s.pad}`, "-t", totalSec.toFixed(2),

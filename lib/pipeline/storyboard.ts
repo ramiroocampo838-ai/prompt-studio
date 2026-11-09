@@ -99,13 +99,14 @@ export async function generateStoryboard(llm: LlmProvider, req: StoryboardReques
   throw new Error(`The model did not return a valid storyboard after ${attempts} attempts: ${lastError}`)
 }
 
-export function toProject(sb: LlmStoryboard, req: StoryboardRequest, id: string): Project {
+export function toProject(sb: LlmStoryboard, req: StoryboardRequest, id: string, opts: { voice?: string; subtitles?: boolean } = {}): Project {
   return ProjectSchema.parse({
     id,
     title: sb.title,
     prompt: req.prompt,
     language: req.language,
-    voice: languageOf(req.language).voice,
+    voice: opts.voice ?? languageOf(req.language).voice,
+    subtitles: opts.subtitles ?? true,
     format: req.format,
     style: req.style,
     scenes: sb.scenes.map((s, i) => ({

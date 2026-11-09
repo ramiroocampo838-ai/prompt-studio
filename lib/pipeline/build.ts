@@ -7,6 +7,7 @@ import { withRetry, mapLimit } from "../queue.ts"
 import { concatClips, mediaDuration, renderClip } from "../ffmpeg.ts"
 import { pollinations, type ImageProvider } from "../providers/image/pollinations.ts"
 import { synthesizeEdge, type TtsJob } from "../providers/tts/edge.ts"
+import { MAX_CHARS, alignWords, buildCues, fallbackWords, toAss, type Word } from "../subtitles.ts"
 
 export interface Deps {
   image: ImageProvider
@@ -30,7 +31,7 @@ export const imageHashOf = (p: Project, s: Scene, provider: string) => {
 }
 export const audioHashOf = (p: Project, s: Scene) => hashOf(p.voice, s.narration)
 export const clipHashOf = (p: Project, s: Scene, imageHash: string, audioHash: string) =>
-  hashOf(imageHash, audioHash, s.motion, p.format, p.padSeconds)
+  hashOf(imageHash, audioHash, s.motion, p.format, p.padSeconds, p.subtitles ? "subs-v2" : "nosubs")
 
 export interface Stale {
   images: string[]
@@ -54,6 +55,17 @@ export function planStale(p: Project, provider: string, exists: (file: string) =
     if (!clipFresh) stale.clips.push(s.id)
   }
   return stale
+}
+
+// Writes the scene's ASS file from the word timings (or a proportional fallback) and returns its path.
+export function writeSubtitles(p: Project, s: Scene, audioFile: string, out: string): string {
+  const timings = audioFile + ".words.json"
+  const words = fs.existsSync(timings)
+    ? alignWords(JSON.parse(fs.readFileSync(timings, "utf8")) as Word[], s.narration)
+    : fallbackWords(s.narration, s.audioDurationSec!)
+  fs.mkdirSync(path.dirname(out), { recursive: true })
+  fs.writeFileSync(out, toAss(buildCues(words, MAX_CHARS[p.format]), p.format))
+  return out
 }
 
 export async function buildProject(project: Project, deps: Deps = defaultDeps): Promise<string> {
@@ -93,14 +105,16 @@ export async function buildProject(project: Project, deps: Deps = defaultDeps): 
     2,
     async (s) => {
       const out = path.join(dir.clips, `${s.id}.mp4`)
+      const audio = path.join(dir.audio, `${s.id}.mp3`)
       const sec = renderClip({
         image: path.join(dir.images, `${s.id}.jpg`),
-        audio: path.join(dir.audio, `${s.id}.mp3`),
+        audio,
         out,
         format: project.format,
         motion: s.motion,
         audioSec: s.audioDurationSec!,
         pad: project.padSeconds,
+        subtitles: project.subtitles ? writeSubtitles(project, s, audio, path.join(dir.clips, `${s.id}.ass`)) : undefined,
       })
       s.clipHash = clipHashOf(project, s, s.imageHash!, s.audioHash!)
       deps.log(`clip ${s.id} (${sec.toFixed(1)}s)`)

@@ -172,7 +172,15 @@ Objetivo: prompt → 3 escenas → mp4, por CLI, antes de construir la UI.
 | 5 | Respaldos y robustez | 1 día |
 | 6 | Documentación | 0.5 día |
 
-## 9. Resultado de la Fase 2 (2026-11-09) ✅
+## 9. Resultado de la Fase 3 (2026-11-09) ✅
+
+- **Subtítulos quemados (ASS)**: `tools/tts.py` ahora pide a edge-tts los tiempos por palabra (`WordBoundary`) y guarda `<audio>.words.json`. `lib/subtitles.ts` (puro y testeado) alinea esas palabras con la puntuación de la narración, agrupa en cues (máx. 44 caracteres en 16:9 y 24 en 9:16, cortando en frases y cláusulas, sin dejar palabras cortas como "y"/"de" al final de línea), genera el `.ass` y ffmpeg lo quema con el filtro `ass`. Si no hay tiempos, reparte las palabras proporcionalmente (fallback). Estilo: Arial negrita blanca con contorno; en vertical se sube para no chocar con la UI de las redes.
+- **Voces**: `pnpm studio voices [es|es-MX|refresh]` lista las ~320 voces de edge-tts (caché semanal en `data/voices.json`); `create --voice <nombre>` la valida y la guarda en el proyecto; `--no-subs` desactiva subtítulos. Cambiar `voice` o `subtitles` en `project.json` invalida solo lo necesario (hashes).
+- Ruta de Windows en el filtro: `C\:/ruta/archivo.ass` (`filterPath`), cubierto por test.
+- Verificado con el video real en español (9:16): subtítulos legibles y sincronizados; reconstrucción sin regenerar imágenes. 31 tests en verde.
+- **Piper (respaldo offline) queda aplazado**: requiere instalar `piper-tts` y descargar modelos, y se prefirió evitar instalaciones. La interfaz `synthesize` ya es intercambiable; se retomará solo si edge-tts deja de funcionar.
+
+## 10. Resultado de la Fase 2 (2026-11-09) ✅
 
 Storyboard con LLM **sin instalar nada y sin cuenta**, usando el endpoint de texto de Pollinations (compatible con OpenAI, modelo `gpt-oss-20b`). Se descartó Ollama a petición del usuario.
 
@@ -188,7 +196,7 @@ Hallazgos:
 - Los errores HTTP ahora incluyen el cuerpo de la respuesta para poder diagnosticar.
 - Tiempo realista: un video de N escenas tarda ≈ 45 s × (N + 1) en total por los límites gratuitos (3 escenas ≈ 3 min).
 
-## 10. Resultado de la Fase 1 (2026-11-09) ✅
+## 11. Resultado de la Fase 1 (2026-11-09) ✅
 
 Pipeline en TypeScript (Node 24 ejecuta `.ts` sin compilar; `tsc` solo verifica tipos). Reemplaza al prototipo `src/`.
 
@@ -202,7 +210,7 @@ Pipeline en TypeScript (Node 24 ejecuta `.ts` sin compilar; `tsc` solo verifica 
 - 16 tests (vitest): esquemas, hash, reintentos, concurrencia, comandos ffmpeg, `planStale` y un test de integración con ffmpeg real y proveedores falsos (verifica idempotencia y reconstrucción parcial).
 - Verificado de extremo a extremo con proveedores reales: 17.8 s; la segunda ejecución no hizo nada (0 imágenes, 0 voces, 0 clips).
 
-## 11. Resultado de la Fase 0 (2026-11-09) ✅
+## 12. Resultado de la Fase 0 (2026-11-09) ✅
 
 
 Prototipo en `src/` (`pnpm demo [16:9|9:16]`): 3 escenas → imágenes → voz → mp4 de 17.8 s, 1920×1080, 25 fps, 2.3 MB, generado en ~21 s. Calidad de imagen y voz aceptable, zoom/paneo fluido.
@@ -215,7 +223,7 @@ Hallazgos que cambian el plan:
 
 9:16 también probado (1080×1920, 17.8 s); tardó 120 s por el límite de imágenes de Pollinations.
 
-## 12. Pendientes por decidir
+## 13. Pendientes por decidir
 
 1. Qué hacer con la marca de agua de Pollinations en el resultado final (aceptarla, usar stock, o volver a evaluar proveedores).
 2. Cómo tratar el límite de 1 imagen/45 s (aceptar la espera, o buscar un proveedor alternativo sin cuenta).

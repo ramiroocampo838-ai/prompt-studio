@@ -3,6 +3,7 @@ import { ProjectSchema } from "../lib/schema.ts"
 import { buildMessages, extractJson, generateStoryboard, parseStoryboard, sceneCount, slugify, toProject } from "../lib/pipeline/storyboard.ts"
 import type { LlmProvider } from "../lib/providers/llm/pollinations.ts"
 import { languageOf } from "../lib/languages.ts"
+import { alignWords, buildCues, fallbackWords, filterPath, toAss } from "../lib/subtitles.ts"
 import { hashOf } from "../lib/hash.ts"
 import { RateLimitError, mapLimit, withRetry } from "../lib/queue.ts"
 import { clipArgs, concatList, motionFilter } from "../lib/ffmpeg.ts"
@@ -166,5 +167,45 @@ describe("storyboard", () => {
   })
   it("rejects unsupported languages", () => {
     expect(() => languageOf("xx")).toThrow(/Unsupported/)
+  })
+})
+
+describe("subtitles", () => {
+  const w = (text: string, start: number) => ({ start, end: start + 0.4, text })
+  it("keeps narration punctuation when the token count matches, else the raw words", () => {
+    const words = [w("Hello", 0), w("there", 0.5)]
+    expect(alignWords(words, "Hello, there.").map((x) => x.text)).toEqual(["Hello,", "there."])
+    expect(alignWords(words, "Hello big there").map((x) => x.text)).toEqual(["Hello", "there"])
+  })
+  it("splits cues at sentence ends and at the character limit", () => {
+    const words = alignWords(
+      ["One", "two", "three.", "Four", "five", "six", "seven", "eight", "nine"].map((t, i) => w(t, i)),
+      "One two three. Four five six seven eight nine",
+    )
+    const cues = buildCues(words, 16)
+    expect(cues[0].text).toBe("One two three.")
+    expect(cues.every((c) => c.text.length <= 16)).toBe(true)
+    expect(cues.map((c) => c.text).join(" ")).toBe("One two three. Four five six seven eight nine")
+  })
+  it("carries trailing short words to the next cue", () => {
+    const text = "entra en la atmósfera y se encuentra"
+    const words = text.split(" ").map((t, i) => w(t, i))
+    const cues = buildCues(words, 24).map((c) => c.text)
+    expect(cues.every((c) => !/ (y|de|la|en|que)$/.test(c) || c === cues.at(-1))).toBe(true)
+    expect(cues.join(" ")).toBe(text)
+  })
+  it("spreads fallback words over the whole audio", () => {
+    const f = fallbackWords("aa bbbb cc", 6)
+    expect(f[0].start).toBe(0)
+    expect(f.at(-1)!.end).toBeCloseTo(6)
+  })
+  it("writes valid ASS with portrait resolution and escaped braces", () => {
+    const ass = toAss([{ start: 0.5, end: 3725.25, text: "A {b} c" }], "9:16")
+    expect(ass).toContain("PlayResY: 1920")
+    expect(ass).toContain("Dialogue: 0,0:00:00.50,1:02:05.25,Default,,0,0,0,,A b c")
+  })
+  it("escapes Windows paths for the ffmpeg filter", () => {
+    expect(filterPath("C:\\a b\\x.ass")).toBe("C\\:/a b/x.ass")
+    expect(clipArgs({ image: "i", audio: "a", out: "o", format: "16:9", motion: "zoom-in", audioSec: 1, pad: 0, subtitles: "C:\\s.ass" }).args.join(" ")).toContain("ass='C\\:/s.ass'")
   })
 })

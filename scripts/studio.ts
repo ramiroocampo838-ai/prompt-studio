@@ -1,6 +1,7 @@
 // CLI: pnpm studio <command>
-//   studio create "<prompt>" [--seconds 60] [--lang en] [--format 16:9|9:16] [--style "..."] [--id x] [--build]
+//   studio create "<prompt>" [--seconds 60] [--lang en] [--voice <name>] [--no-subs] [--format 16:9|9:16] [--style "..."] [--id x] [--build]
 //                                      generate an editable storyboard with the LLM
+//   studio voices [lang|refresh]       list edge-tts voices (e.g. "es" or "es-MX")
 //   studio new-demo [id] [16:9|9:16]   create the sample 3-scene project
 //   studio build <id>                  build (or resume) a project, generating only stale artifacts
 //   studio list                        list projects
@@ -11,6 +12,7 @@ import { buildProject } from "../lib/pipeline/build.ts"
 import { generateStoryboard, slugify, toProject } from "../lib/pipeline/storyboard.ts"
 import { pollinationsText } from "../lib/providers/llm/pollinations.ts"
 import { withRetry } from "../lib/queue.ts"
+import { assertVoice, filterVoices, loadVoices } from "../lib/voices.ts"
 import fs from "node:fs"
 
 const { values, positionals } = parseArgs({
@@ -21,14 +23,21 @@ const { values, positionals } = parseArgs({
     format: { type: "string", default: "16:9" },
     style: { type: "string", default: "cinematic digital illustration, soft light, highly detailed" },
     id: { type: "string" },
+    voice: { type: "string" },
+    "no-subs": { type: "boolean", default: false },
     build: { type: "boolean", default: false },
   },
 })
 const [cmd, a, b] = positionals
 
-if (cmd === "create" && a) {
+if (cmd === "voices") {
+  const list = filterVoices(loadVoices(a === "refresh"), a === "refresh" ? undefined : a)
+  for (const v of list) console.log(`${v.name.padEnd(34)} ${v.gender.padEnd(7)} ${v.locale}`)
+  console.log(`${list.length} voices`)
+} else if (cmd === "create" && a) {
   const format = values.format
   if (format !== "16:9" && format !== "9:16") throw new Error(`Unknown format '${format}'`)
+  if (values.voice) assertVoice(loadVoices(), values.voice)
   const durationSec = Number(values.seconds)
   if (!(durationSec >= 10 && durationSec <= 600)) throw new Error("--seconds must be between 10 and 600")
   const req = { prompt: a, language: values.lang, format, style: values.style, durationSec } as const
@@ -39,7 +48,7 @@ if (cmd === "create" && a) {
   })
   const id = values.id ?? slugify(storyboard.title)
   if (fs.existsSync(paths(id).file)) throw new Error(`Project '${id}' already exists; pass --id to choose another name`)
-  const project = toProject(storyboard, req, id)
+  const project = toProject(storyboard, req, id, { voice: values.voice, subtitles: !values["no-subs"] })
   saveProject(project)
   console.log(`\n"${project.title}" (${project.scenes.length} scenes) saved to ${paths(id).file}`)
   for (const s of project.scenes) console.log(`  ${s.id}: ${s.narration}`)
