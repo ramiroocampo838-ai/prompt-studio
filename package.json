@@ -4,6 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "demo": "node --use-system-ca src/demo.mjs"
+    "studio": "node --use-system-ca scripts/studio.ts",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

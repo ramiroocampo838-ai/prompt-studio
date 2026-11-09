@@ -172,7 +172,22 @@ Objetivo: prompt → 3 escenas → mp4, por CLI, antes de construir la UI.
 | 5 | Respaldos y robustez | 1 día |
 | 6 | Documentación | 0.5 día |
 
-## 9. Resultado de la Fase 0 (2026-11-09) ✅
+## 9. Resultado de la Fase 1 (2026-11-09) ✅
+
+Pipeline en TypeScript (Node 24 ejecuta `.ts` sin compilar; `tsc` solo verifica tipos). Reemplaza al prototipo `src/`.
+
+- `lib/schema.ts` (zod): proyecto y escenas, ids únicos, narración no vacía, ids de proyecto como slug seguro.
+- `lib/store.ts`: `data/projects/<id>/` con escritura atómica de `project.json`.
+- `lib/pipeline/build.ts`: caché por hash (`imageHash`, `audioHash`, `clipHash`). Solo se regeneran las escenas cuyo hash cambió o cuyo archivo falta; el progreso se guarda tras cada imagen, así que se puede reanudar. Cambiar el estilo invalida imágenes y clips; cambiar una narración solo afecta esa escena.
+- `lib/queue.ts`: `withRetry` (backoff y respeto de `Retry-After`) y `mapLimit`. Imágenes en serie por el límite de Pollinations; clips con concurrencia 2.
+- `lib/ffmpeg.ts`: comandos puros y testeables; 25 fps, CRF 23, duración de cada escena = audio medido con ffprobe + pausa.
+- Proveedores intercambiables: `lib/providers/image/pollinations.ts`, `lib/providers/tts/edge.ts` (con pista si falla con 403).
+- CLI: `pnpm studio new-demo [id] [formato]`, `pnpm studio build <id>`, `pnpm studio list`. Además `pnpm typecheck` y `pnpm test`.
+- 16 tests (vitest): esquemas, hash, reintentos, concurrencia, comandos ffmpeg, `planStale` y un test de integración con ffmpeg real y proveedores falsos (verifica idempotencia y reconstrucción parcial).
+- Verificado de extremo a extremo con proveedores reales: 17.8 s; la segunda ejecución no hizo nada (0 imágenes, 0 voces, 0 clips).
+
+## 10. Resultado de la Fase 0 (2026-11-09) ✅
+
 
 Prototipo en `src/` (`pnpm demo [16:9|9:16]`): 3 escenas → imágenes → voz → mp4 de 17.8 s, 1920×1080, 25 fps, 2.3 MB, generado en ~21 s. Calidad de imagen y voz aceptable, zoom/paneo fluido.
 
@@ -182,9 +197,9 @@ Hallazgos que cambian el plan:
 - **edge-tts 7.2.8 devolvía 403**; actualizar a 7.3.1 (`pip install -U edge-tts`) lo resolvió. Documentar en el README y manejar el error con un mensaje claro.
 - La **marca de agua "pollinations.ai"** aparece en la esquina inferior derecha incluso con `nologo=true`.
 
-Pendiente de la Fase 0: probar 9:16 (`pnpm demo 9:16`).
+9:16 también probado (1080×1920, 17.8 s); tardó 120 s por el límite de imágenes de Pollinations.
 
-## 10. Pendientes por decidir
+## 11. Pendientes por decidir
 
 1. Qué hacer con la marca de agua de Pollinations en el resultado final (aceptarla, usar stock, o volver a evaluar proveedores).
 2. Cómo tratar el límite de 1 imagen/45 s (aceptar la espera, o buscar un proveedor alternativo sin cuenta).
