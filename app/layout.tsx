@@ -14,6 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </Link>
           <nav>
             <Link href="/">Projects</Link>
+            <Link href="/images" style={{ marginLeft: 18 }}>Images</Link>
           </nav>
         </header>
         <main className="container">{children}</main>

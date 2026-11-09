@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { MOTIONS, type Project, type Scene } from "../../../lib/schema.ts"
+import { MOTIONS, type LibraryImage, type Project, type Scene } from "../../../lib/schema.ts"
 
 export default function Editor() {
   const { id } = useParams<{ id: string }>()
@@ -12,6 +12,19 @@ export default function Editor() {
   const [error, setError] = useState("")
   const [stamp, setStamp] = useState(Date.now())
   const counter = useRef(1)
+  const [picking, setPicking] = useState<number | null>(null)
+  const [library, setLibrary] = useState<LibraryImage[] | null>(null)
+  const [notice, setNotice] = useState("")
+
+  function openPicker(i: number) {
+    setPicking(picking === i ? null : i)
+    fetch("/api/images").then((r) => r.json()).then(setLibrary).catch(() => setLibrary([]))
+  }
+  async function saveToLibrary(sceneId: string) {
+    const res = await fetch("/api/images", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fromProject: id, sceneId }) })
+    const d = await res.json()
+    setNotice(res.ok ? "Saved to the library." : d.error ?? `HTTP ${res.status}`)
+  }
   const [render, setRender] = useState<{ status: string; lines: string[]; error?: string }>({ status: "idle", lines: [] })
   const source = useRef<EventSource | null>(null)
 
@@ -141,6 +154,7 @@ export default function Editor() {
         </div>
       </div>
       {error && <p className="err">{error}</p>}
+      {notice && <p className="muted">{notice}</p>}
 
       {render.status !== "idle" && (
         <div className="panel">
@@ -186,10 +200,40 @@ export default function Editor() {
 
       {project.scenes.map((s, i) => (
         <div className="scene" key={s.id}>
-          <div className={`thumb ${portrait ? "portrait" : ""}`}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/projects/${id}/media/images/${s.id}.jpg?v=${stamp}`} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />
-            <span style={{ position: "absolute" }} />
+          <div>
+            <div className={`thumb ${portrait ? "portrait" : ""}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img key={s.imageRef ?? "gen"} src={s.imageRef ? `/api/images/${s.imageRef}/file` : `/api/projects/${id}/media/images/${s.id}.jpg?v=${stamp}`} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />
+            </div>
+            <div className="actions" style={{ marginTop: 8 }}>
+              <button type="button" className="ghost" onClick={() => openPicker(i)}>
+                Library
+              </button>
+              {s.imageRef && (
+                <button type="button" className="ghost" onClick={() => patchScene(i, { imageRef: undefined })}>
+                  Generate instead
+                </button>
+              )}
+              {!s.imageRef && !dirty && (
+                <button type="button" className="ghost" onClick={() => saveToLibrary(s.id)}>
+                  Save to library
+                </button>
+              )}
+            </div>
+            {picking === i && (
+              <div className="picker">
+                {library === null ? (
+                  <span className="muted">Loading…</span>
+                ) : library.length === 0 ? (
+                  <span className="muted">The library is empty.</span>
+                ) : (
+                  library.map((img) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={img.id} src={`/api/images/${img.id}/file`} alt={img.prompt} title={img.prompt} onClick={() => { patchScene(i, { imageRef: img.id }); setPicking(null) }} />
+                  ))
+                )}
+              </div>
+            )}
           </div>
           <div>
             <div className="scene-head">

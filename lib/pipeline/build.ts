@@ -3,6 +3,7 @@ import path from "node:path"
 import { hashOf } from "../hash.ts"
 import { FORMATS, type Project, type Scene } from "../schema.ts"
 import { paths, saveProject } from "../store.ts"
+import { imageFile } from "../library.ts"
 import { withRetry, mapLimit } from "../queue.ts"
 import { concatClips, mediaDuration, renderClip } from "../ffmpeg.ts"
 import { pollinations, type ImageProvider } from "../providers/image/pollinations.ts"
@@ -27,6 +28,7 @@ export const fullImagePrompt = (p: Project, s: Scene) => (p.style ? `${s.imagePr
 
 export const imageHashOf = (p: Project, s: Scene, provider: string) => {
   const { width, height } = imageSize(p.format)
+  if (s.imageRef) return hashOf("library", s.imageRef, width, height)
   return hashOf(provider, fullImagePrompt(p, s), s.seed, width, height)
 }
 export const audioHashOf = (p: Project, s: Scene) => hashOf(p.voice, s.narration)
@@ -78,10 +80,18 @@ export async function buildProject(project: Project, deps: Deps = defaultDeps): 
   for (const id of stale.images) {
     const s = byId.get(id)!
     const { width, height } = imageSize(project.format)
-    await withRetry(
-      () => deps.image.generate({ prompt: fullImagePrompt(project, s), width, height, seed: s.seed, file: path.join(dir.images, `${s.id}.jpg`) }),
-      { onRetry: (e, n, ms) => deps.log(`  image ${s.id}: ${e.message}; retry ${n} in ${Math.round(ms / 1000)}s`) },
-    )
+    const target = path.join(dir.images, `${s.id}.jpg`)
+    if (s.imageRef) {
+      const source = imageFile(s.imageRef)
+      if (!fs.existsSync(source)) throw new Error(`Scene ${s.id}: library image '${s.imageRef}' no longer exists`)
+      fs.mkdirSync(dir.images, { recursive: true })
+      fs.copyFileSync(source, target)
+    } else {
+      await withRetry(
+        () => deps.image.generate({ prompt: fullImagePrompt(project, s), width, height, seed: s.seed, file: target }),
+        { onRetry: (e, n, ms) => deps.log(`  image ${s.id}: ${e.message}; retry ${n} in ${Math.round(ms / 1000)}s`) },
+      )
+    }
     s.imageHash = imageHashOf(project, s, deps.image.name)
     saveProject(project)
     deps.log(`image ${s.id}`)

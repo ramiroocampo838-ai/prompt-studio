@@ -118,6 +118,15 @@ describe("planStale", () => {
     p.style = "watercolor"
     expect(planStale(p, "prov", () => true)).toEqual({ images: ["a", "b"], audio: [], clips: ["a", "b"] })
   })
+  it("switching a scene to a library image reruns only that image, ignoring style changes after", () => {
+    const p = fresh()
+    p.scenes[0].imageRef = "img-1"
+    expect(planStale(p, "prov", () => true)).toEqual({ images: ["a"], audio: [], clips: ["a"] })
+    p.scenes[0].imageHash = imageHashOf(p, p.scenes[0], "prov")
+    p.scenes[0].clipHash = clipHashOf(p, p.scenes[0], p.scenes[0].imageHash, p.scenes[0].audioHash!)
+    p.style = "watercolor"
+    expect(planStale(p, "prov", () => true).images).toEqual(["b"])
+  })
   it("treats missing files as stale", () => {
     const s = planStale(fresh(), "prov", (f) => !f.endsWith("a.mp3"))
     expect(s.audio).toEqual(["a"])

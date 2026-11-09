@@ -191,6 +191,15 @@ La Fase 4 se dividió en tres entregas: **4A** base Next.js + listado + crear de
 - Verificado: render real vía API (voz + 3 clips + concat), 409 en doble render y PUT, segundo render sin trabajo (0/0/0), SSE completo, captura de la UI.
 - Limitación: los jobs viven en memoria (reiniciar el servidor pierde el log, no los archivos). Regenerar voz = editar la narración.
 
+## 8d. Resultado de la Fase 4C (2026-11-09) ✅
+
+- Biblioteca global en `data/images/` (`index.json` + `<id>.jpg`, ids inmutables): `lib/library.ts`, `LibraryImageSchema`.
+- API: `GET/POST /api/images` (genera **una** imagen por petición por el límite de 45 s; o importa la imagen de una escena con `{fromProject, sceneId}`), `PATCH/DELETE /api/images/[id]` (etiquetas normalizadas), `GET /api/images/[id]/file`.
+- Escena con `imageRef`: el build **copia** la imagen de la biblioteca en vez de generarla (el hash usa el id de la imagen, no el prompt/estilo, así que cambiar el estilo no la invalida). Si el aspecto no coincide, ffmpeg recorta (`increase` + `crop`).
+- UI: página `/images` (generar 1–4 variaciones con seeds distintas, etiquetas, filtro, descargar, borrar) y en el editor *Library* (elegir), *Generate instead* y *Save to library*.
+- Verificado: importar, etiquetar, usar en escena y renderizar (bytes idénticos, sin llamar al generador), generación real 9:16, ids maliciosos 400, 33 tests, typecheck, capturas con Playwright.
+- Nota de desarrollo: no redirigir logs del dev server dentro del proyecto (dispara Fast Refresh en bucle).
+
 ## 9. Resultado de la Fase 3 (2026-11-09) ✅
 
 - **Subtítulos quemados (ASS)**: `tools/tts.py` ahora pide a edge-tts los tiempos por palabra (`WordBoundary`) y guarda `<audio>.words.json`. `lib/subtitles.ts` (puro y testeado) alinea esas palabras con la puntuación de la narración, agrupa en cues (máx. 44 caracteres en 16:9 y 24 en 9:16, cortando en frases y cláusulas, sin dejar palabras cortas como "y"/"de" al final de línea), genera el `.ass` y ffmpeg lo quema con el filtro `ass`. Si no hay tiempos, reparte las palabras proporcionalmente (fallback). Estilo: Arial negrita blanca con contorno; en vertical se sube para no chocar con la UI de las redes.

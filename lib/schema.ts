@@ -13,6 +13,8 @@ export const SceneSchema = z.object({
   imagePrompt: z.string().trim().min(1, "imagePrompt is empty"),
   seed: z.number().int().default(1),
   motion: z.enum(MOTIONS).default("zoom-in"),
+  // Id of a library image used instead of generating one.
+  imageRef: z.string().optional(),
   // Cache keys of the last generated artifacts; a mismatch means the artifact is stale.
   imageHash: z.string().optional(),
   audioHash: z.string().optional(),
@@ -42,5 +44,16 @@ export const ProjectSchema = z
   })
 
 export type Scene = z.infer<typeof SceneSchema>
+
+export const LibraryImageSchema = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-_]*$/i),
+  prompt: z.string(),
+  seed: z.number().int(),
+  width: z.number().int(),
+  height: z.number().int(),
+  tags: z.array(z.string()).default([]),
+  createdAt: z.string(),
+})
+export type LibraryImage = z.infer<typeof LibraryImageSchema>
 export type Project = z.infer<typeof ProjectSchema>
 export type Format = keyof typeof FORMATS
