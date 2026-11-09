@@ -1,0 +1,9 @@
+{
+  "name": "prompt-studio",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "node --use-system-ca src/demo.mjs"
+  }
+}
