@@ -32,7 +32,7 @@ export function startBuild(projectId: string): Job {
   if (isRunning(projectId)) throw new Error("already running")
   const job: Job = { projectId, status: "running", lines: [], startedAt: Date.now() }
   jobs.set(projectId, job)
-  const child = spawn(process.execPath, ["--use-system-ca", "scripts/studio.ts", "build", projectId], { cwd: process.cwd() })
+  const child = spawn(process.execPath, ["--use-system-ca", "--env-file-if-exists=.env.local", "scripts/studio.ts", "build", projectId], { cwd: process.cwd() })
   const push = (chunk: Buffer) => {
     for (const line of chunk.toString().split(/\r?\n/)) {
       if (!line.trim()) continue

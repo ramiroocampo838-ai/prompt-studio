@@ -4,19 +4,24 @@ import { hashOf } from "../hash.ts"
 import { FORMATS, type Project, type Scene } from "../schema.ts"
 import { paths, saveProject } from "../store.ts"
 import { imageFile } from "../library.ts"
-import { withRetry, mapLimit } from "../queue.ts"
+import { withRetry, mapLimit, type RetryOptions } from "../queue.ts"
 import { concatClips, mediaDuration, renderClip } from "../ffmpeg.ts"
 import { pollinations, type ImageProvider } from "../providers/image/pollinations.ts"
+import { pexelsFromEnv } from "../providers/image/pexels.ts"
 import { synthesizeEdge, type TtsJob } from "../providers/tts/edge.ts"
 import { MAX_CHARS, alignWords, buildCues, fallbackWords, toAss, type Word } from "../subtitles.ts"
 
 export interface Deps {
   image: ImageProvider
+  // Used for a scene when the main provider keeps failing (e.g. stock photos from Pexels).
+  fallbackImage?: ImageProvider
+  // Overrides the retry policy (tests use it to avoid real waits).
+  retry?: Pick<RetryOptions, "retries" | "baseMs" | "sleep">
   synthesize: (jobs: TtsJob[]) => void
   log: (msg: string) => void
 }
 
-export const defaultDeps: Deps = { image: pollinations, synthesize: synthesizeEdge, log: console.log }
+export const defaultDeps: Deps = { image: pollinations, fallbackImage: pexelsFromEnv(), synthesize: synthesizeEdge, log: console.log }
 
 // Images are generated at ~2/3 of the output size; ffmpeg upscales before the camera motion.
 export function imageSize(format: Project["format"]): { width: number; height: number } {
@@ -87,10 +92,17 @@ export async function buildProject(project: Project, deps: Deps = defaultDeps): 
       fs.mkdirSync(dir.images, { recursive: true })
       fs.copyFileSync(source, target)
     } else {
-      await withRetry(
-        () => deps.image.generate({ prompt: fullImagePrompt(project, s), width, height, seed: s.seed, file: target }),
-        { onRetry: (e, n, ms) => deps.log(`  image ${s.id}: ${e.message}; retry ${n} in ${Math.round(ms / 1000)}s`) },
-      )
+      const req = { prompt: fullImagePrompt(project, s), width, height, seed: s.seed, file: target }
+      try {
+        await withRetry(() => deps.image.generate(req), {
+          ...deps.retry,
+          onRetry: (e, n, ms) => deps.log(`  image ${s.id}: ${e.message}; retry ${n} in ${Math.round(ms / 1000)}s`),
+        })
+      } catch (e) {
+        if (!deps.fallbackImage) throw e
+        deps.log(`  image ${s.id}: ${(e as Error).message}; using ${deps.fallbackImage.name} instead`)
+        await withRetry(() => deps.fallbackImage!.generate({ ...req, prompt: s.imagePrompt }), { retries: 2, ...deps.retry })
+      }
     }
     s.imageHash = imageHashOf(project, s, deps.image.name)
     saveProject(project)

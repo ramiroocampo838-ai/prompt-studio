@@ -54,4 +54,26 @@ describe("buildProject", () => {
     await buildProject(loadProject(id), deps)
     expect(calls).toEqual({ images: 2, voices: 3 })
   }, 120_000)
+
+  it("falls back to the secondary image provider when the main one keeps failing", async () => {
+    const fid = `${id}-fb`
+    saveProject(ProjectSchema.parse({ id: fid, title: "FB", scenes: [{ id: "a", narration: "One.", imagePrompt: "x", seed: 1 }] }))
+    let primary = 0
+    const failing: Deps = {
+      ...deps,
+      retry: { retries: 2, sleep: async () => {} },
+      image: { name: "down", async generate() { primary++; throw new Error("HTTP 500") } },
+      fallbackImage: deps.image,
+    }
+    const before = calls.images
+    try {
+      await buildProject(loadProject(fid), failing)
+      expect(primary).toBe(2)
+      expect(calls.images).toBe(before + 1)
+      await expect(buildProject(loadProject(fid), { ...failing, fallbackImage: undefined })).resolves.toBeTypeOf("string")
+      expect(primary).toBe(2)
+    } finally {
+      fs.rmSync(paths(fid).root, { recursive: true, force: true })
+    }
+  }, 120_000)
 })

@@ -1,3 +1,6 @@
+import fs from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 import { ProjectSchema } from "../lib/schema.ts"
 import { buildMessages, extractJson, generateStoryboard, parseStoryboard, sceneCount, slugify, toProject } from "../lib/pipeline/storyboard.ts"
@@ -6,6 +9,8 @@ import { languageOf } from "../lib/languages.ts"
 import { alignWords, buildCues, fallbackWords, filterPath, toAss } from "../lib/subtitles.ts"
 import { hashOf } from "../lib/hash.ts"
 import { pickId } from "../lib/pipeline/create.ts"
+import { keywordsOf, makePexels } from "../lib/providers/image/pexels.ts"
+import { chaptersOf, stamp, youtubeMetadata } from "../lib/youtube.ts"
 import { RateLimitError, mapLimit, withRetry } from "../lib/queue.ts"
 import { clipArgs, concatList, motionFilter } from "../lib/ffmpeg.ts"
 import { planStale, imageHashOf, audioHashOf, clipHashOf } from "../lib/pipeline/build.ts"
@@ -25,6 +30,56 @@ describe("schema", () => {
   })
   it("rejects ids that are not simple slugs", () => {
     expect(ProjectSchema.safeParse({ id: "../x", title: "T", scenes: [scene("a")] }).success).toBe(false)
+  })
+})
+
+describe("pexels", () => {
+  it("keeps the meaningful words of an image prompt", () => {
+    expect(keywordsOf("an old wooden sailing ship at night under a sky full of stars, cinematic digital illustration")).toBe("old wooden sailing ship")
+  })
+  it("searches by orientation, picks by seed and writes the photo", async () => {
+    const urls: string[] = []
+    const fake = (async (url: string) => {
+      urls.push(String(url))
+      if (String(url).includes("api.pexels.com")) {
+        return Response.json({ photos: [{ src: { large2x: "https://img/0.jpg" } }, { src: { large2x: "https://img/1.jpg" } }] })
+      }
+      return new Response(new Uint8Array([1, 2, 3]))
+    }) as unknown as typeof fetch
+    const file = path.join(os.tmpdir(), `pexels-test-${process.pid}.jpg`)
+    await makePexels("key", fake).generate({ prompt: "red fox in snow", width: 720, height: 1288, seed: 3, file })
+    expect(urls[0]).toContain("orientation=portrait")
+    expect(urls[1]).toBe("https://img/1.jpg")
+    expect([...fs.readFileSync(file)]).toEqual([1, 2, 3])
+    fs.rmSync(file)
+  })
+})
+
+describe("youtube metadata", () => {
+  const timed = (secs: number[]) =>
+    ProjectSchema.parse({
+      id: "y",
+      title: "Why the sky is blue",
+      prompt: "Explain why the sky is blue",
+      format: "9:16",
+      scenes: secs.map((d, i) => ({ id: `s${i}`, narration: `Scene number ${i}, with words.`, imagePrompt: "x", audioDurationSec: d })),
+    })
+  it("formats timestamps", () => {
+    expect([stamp(0), stamp(65), stamp(3725)]).toEqual(["0:00", "1:05", "1:02:05"])
+  })
+  it("merges short scenes into chapters of at least 10 s, starting at 0:00", () => {
+    const c = chaptersOf(timed([6, 6, 6, 6, 6, 6, 6, 6]))
+    expect(c[0]).toEqual({ time: "0:00", label: "Scene number 0 with words" })
+    expect(c.map((x) => x.time)).toEqual(["0:00", "0:13", "0:26", "0:39"])
+  })
+  it("omits chapters when there are fewer than three or the video is not built", () => {
+    expect(chaptersOf(timed([6, 6, 6]))).toEqual([])
+    const p = timed([6, 6])
+    p.scenes[0].audioDurationSec = undefined
+    expect(chaptersOf(p)).toEqual([])
+  })
+  it("adds #Shorts for vertical videos", () => {
+    expect(youtubeMetadata(timed([6, 6])).description).toContain("#Shorts")
   })
 })
 

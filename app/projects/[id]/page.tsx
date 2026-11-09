@@ -15,6 +15,19 @@ export default function Editor() {
   const [picking, setPicking] = useState<number | null>(null)
   const [library, setLibrary] = useState<LibraryImage[] | null>(null)
   const [notice, setNotice] = useState("")
+  const [meta, setMeta] = useState<{ title: string; description: string; tags: string[]; chapters: unknown[] } | null>(null)
+
+  async function loadMeta() {
+    const res = await fetch(`/api/projects/${id}/youtube`)
+    const d = await res.json()
+    if (res.ok) setMeta(d)
+    else setError(d.error ?? `HTTP ${res.status}`)
+  }
+  async function cleanUp() {
+    const res = await fetch(`/api/projects/${id}/clean`, { method: "POST" })
+    const d = await res.json()
+    setNotice(res.ok ? `Freed ${(d.freedBytes / 1e6).toFixed(1)} MB. The next render rebuilds the clips (images and voices are kept).` : d.error ?? `HTTP ${res.status}`)
+  }
 
   function openPicker(i: number) {
     setPicking(picking === i ? null : i)
@@ -178,6 +191,25 @@ export default function Editor() {
             </a>
             <span className="muted">Only changed scenes are regenerated on each render.</span>
           </div>
+          <div className="actions" style={{ marginTop: 10 }}>
+            <button type="button" className="ghost" onClick={loadMeta}>
+              YouTube metadata
+            </button>
+            <button type="button" className="ghost" onClick={cleanUp}>
+              Free disk space
+            </button>
+          </div>
+          {meta && (
+            <div style={{ marginTop: 12 }}>
+              <label>Title</label>
+              <input readOnly value={meta.title} onFocus={(e) => e.target.select()} />
+              <label style={{ marginTop: 10 }}>Description (with chapters)</label>
+              <textarea readOnly rows={Math.min(14, meta.description.split("\n").length + 1)} value={meta.description} onFocus={(e) => e.target.select()} />
+              <label style={{ marginTop: 10 }}>Tags</label>
+              <input readOnly value={meta.tags.join(", ")} onFocus={(e) => e.target.select()} />
+              {!meta.chapters.length && <p className="note">No chapters: render first, and the video needs at least three sections of 10 s or more.</p>}
+            </div>
+          )}
         </div>
       )}
 

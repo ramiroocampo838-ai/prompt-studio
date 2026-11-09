@@ -73,3 +73,16 @@ export function deleteProject(id: string): void {
   if (path.dirname(root) !== DATA_DIR) throw new Error("refusing to delete outside the data folder")
   fs.rmSync(root, { recursive: true, force: true })
 }
+
+const sizeOf = (dir: string): number =>
+  fs.existsSync(dir)
+    ? fs.readdirSync(dir, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? sizeOf(path.join(dir, e.name)) : fs.statSync(path.join(dir, e.name)).size), 0)
+    : 0
+
+// Removes the per-scene clips and subtitle files; images, voices and the final video stay. Returns the bytes freed.
+export function cleanIntermediates(id: string): number {
+  const { clips } = paths(id)
+  const freed = sizeOf(clips)
+  fs.rmSync(clips, { recursive: true, force: true })
+  return freed
+}

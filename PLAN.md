@@ -200,6 +200,15 @@ La Fase 4 se dividió en tres entregas: **4A** base Next.js + listado + crear de
 - Verificado: importar, etiquetar, usar en escena y renderizar (bytes idénticos, sin llamar al generador), generación real 9:16, ids maliciosos 400, 33 tests, typecheck, capturas con Playwright.
 - Nota de desarrollo: no redirigir logs del dev server dentro del proyecto (dispara Fast Refresh en bucle).
 
+## 8e. Resultado de la Fase 5 (2026-11-09) ✅
+
+- **Respaldo de imágenes:** `lib/providers/image/pexels.ts` (fotos de stock; clave gratuita **opcional** `PEXELS_API_KEY` en `.env.local`, ver `.env.example`). Búsqueda por palabras clave extraídas del `imagePrompt` (sin palabras vacías en en/es/fr/pt/de/it), orientación según el formato, foto elegida por seed. Sin clave todo sigue funcionando solo con Pollinations.
+- **Cambio automático:** si Pollinations agota sus reintentos, la escena usa el respaldo y se registra en el log. La imagen de respaldo se considera fresca (hash del proveedor principal): no se vuelve a pedir a Pollinations en cada render; para regenerarla cambia la seed. `Deps.retry` permite acotar los reintentos en pruebas.
+- **Limpieza:** `studio clean <id>` y botón *Free disk space* (`POST /api/projects/[id]/clean`, 409 si se está renderizando) borran `clips/` (clips y .ass); conservan imágenes, voces y el video final. El siguiente render solo reconstruye clips. (El `data/work` del plan original no existe: los intermedios viven en cada proyecto.)
+- **YouTube:** `lib/youtube.ts`, `studio youtube <id>`, `GET /api/projects/[id]/youtube` y panel en el editor: título, descripción con capítulos, etiquetas y `#Shorts` en vertical. Los capítulos cumplen las reglas de YouTube (empiezan en 0:00, ≥3, ≥10 s: se fusionan escenas cortas); si no se cumplen, se omiten.
+- `studio` y el render web cargan `.env.local` si existe (`--env-file-if-exists`; imprime un aviso inofensivo si no está).
+- Verificado: 40 tests (incluye fallback con proveedor caído y Pexels con fetch simulado), typecheck, `next build`, CLI y API (youtube, clean, id inválido 400). **No** se probó Pexels real (requiere clave).
+
 ## 9. Resultado de la Fase 3 (2026-11-09) ✅
 
 - **Subtítulos quemados (ASS)**: `tools/tts.py` ahora pide a edge-tts los tiempos por palabra (`WordBoundary`) y guarda `<audio>.words.json`. `lib/subtitles.ts` (puro y testeado) alinea esas palabras con la puntuación de la narración, agrupa en cues (máx. 44 caracteres en 16:9 y 24 en 9:16, cortando en frases y cláusulas, sin dejar palabras cortas como "y"/"de" al final de línea), genera el `.ass` y ffmpeg lo quema con el filtro `ass`. Si no hay tiempos, reparte las palabras proporcionalmente (fallback). Estilo: Arial negrita blanca con contorno; en vertical se sube para no chocar con la UI de las redes.

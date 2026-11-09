@@ -4,10 +4,13 @@
 //   studio voices [lang|refresh]       list edge-tts voices (e.g. "es" or "es-MX")
 //   studio new-demo [id] [16:9|9:16]   create the sample 3-scene project
 //   studio build <id>                  build (or resume) a project, generating only stale artifacts
+//   studio youtube <id>                print title, description with chapters, and tags for YouTube
+//   studio clean <id>                  delete per-scene clips to free disk space
 //   studio list                        list projects
 import { parseArgs } from "node:util"
 import { ProjectSchema } from "../lib/schema.ts"
-import { listProjects, loadProject, saveProject, paths } from "../lib/store.ts"
+import { cleanIntermediates, listProjects, loadProject, saveProject, paths } from "../lib/store.ts"
+import { youtubeMetadata } from "../lib/youtube.ts"
 import { buildProject } from "../lib/pipeline/build.ts"
 import { createFromPrompt } from "../lib/pipeline/create.ts"
 import { pollinationsText } from "../lib/providers/llm/pollinations.ts"
@@ -72,9 +75,15 @@ if (cmd === "voices") {
   console.log(`Created ${paths(id).file}`)
 } else if (cmd === "build" && a) {
   await buildProject(loadProject(a))
+} else if (cmd === "youtube" && a) {
+  const m = youtubeMetadata(loadProject(a))
+  console.log(`${m.title}\n\n${m.description}\n\nTags: ${m.tags.join(", ")}`)
+  if (!m.chapters.length) console.log("\n(no chapters: build the project first, and it needs at least 3 chapters of 10 s or more)")
+} else if (cmd === "clean" && a) {
+  console.log(`Freed ${(cleanIntermediates(a) / 1e6).toFixed(1)} MB (clips and subtitle files; images, voices and the video are kept)`)
 } else if (cmd === "list") {
   for (const id of listProjects()) console.log(id)
 } else {
-  console.error('Usage: pnpm studio create "<prompt>" [options] | new-demo [id] [format] | build <id> | list')
+  console.error('Usage: pnpm studio create "<prompt>" [options] | new-demo [id] [format] | build <id> | youtube <id> | clean <id> | list')
   process.exit(1)
 }

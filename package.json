@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "studio": "node --use-system-ca scripts/studio.ts",
+    "studio": "node --use-system-ca --env-file-if-exists=.env.local scripts/studio.ts",
     "dev": "node --use-system-ca node_modules/next/dist/bin/next dev -H 127.0.0.1",
     "build": "node --use-system-ca node_modules/next/dist/bin/next build",
     "start": "node --use-system-ca node_modules/next/dist/bin/next start -H 127.0.0.1",
