@@ -262,7 +262,11 @@ Hallazgos que cambian el plan:
 
 ## 13. Pendientes por decidir
 
-1. Qué hacer con la marca de agua de Pollinations en el resultado final (aceptarla, usar stock, o volver a evaluar proveedores).
-2. Cómo tratar el límite de 1 imagen/45 s (aceptar la espera, o buscar un proveedor alternativo sin cuenta).
-3. Modelo de Ollama a usar tras medir velocidad en CPU.
-4. Si el nuevo repo se publica en GitHub o queda solo local.
+1. **Pendiente:** qué hacer con la marca de agua de Pollinations (aceptarla, usar stock, o volver a evaluar proveedores). Por ahora se deja.
+2. ✅ Límite de 1 imagen/45 s: se acepta la espera.
+3. ✅ Ollama: descartado.
+4. ✅ Se publicará en GitHub, **después** de probarlo manualmente en local.
+
+## 8f. Resultado de la Fase 6 ✅
+
+`README.md` con requisitos, instalación, uso web y CLI, configuración opcional, solución de problemas (límite de 45 s, marca de agua, proxy TLS, edge-tts), tests y licencias/términos de los servicios. Antes de publicar: prueba manual local y revisar que `data/` y `.env.local` sigan fuera de git.
